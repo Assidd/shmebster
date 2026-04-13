@@ -1,17 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Eye,
-  EyeOff,
-  Trash2,
-  ChevronUp,
-  ChevronDown,
-  Type,
-  Square,
-  Circle,
-  Triangle,
-  Minus,
-  Pencil,
-  Image,
+  Eye, EyeOff, Trash2, ChevronUp, ChevronDown,
+  Type, Square, Circle, Triangle, Minus, Pencil, Image, Box,
 } from 'lucide-react';
 import { useCanvasInstance } from '../../canvasInstance';
 import { useEditorStore } from '../../../../stores/editorStore';
@@ -25,15 +15,15 @@ interface LayerItem {
   object: any;
 }
 
-const typeIcons: Record<string, typeof Square> = {
-  rect: Square,
-  circle: Circle,
-  triangle: Triangle,
-  line: Minus,
-  textbox: Type,
-  'i-text': Type,
-  path: Pencil,
-  image: Image,
+const TYPE_ICONS: Record<string, React.ElementType> = {
+  rect: Square, circle: Circle, triangle: Triangle, line: Minus,
+  textbox: Type, 'i-text': Type, path: Pencil, image: Image,
+};
+
+const TYPE_COLORS: Record<string, string> = {
+  rect: 'text-blue-500', circle: 'text-purple-500', triangle: 'text-orange-500',
+  line: 'text-gray-500', textbox: 'text-green-500', 'i-text': 'text-green-500',
+  path: 'text-pink-500', image: 'text-cyan-500',
 };
 
 export default function LayersPanel() {
@@ -42,61 +32,47 @@ export default function LayersPanel() {
   const [layers, setLayers] = useState<LayerItem[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const refreshLayers = useCallback(() => {
+  const refresh = useCallback(() => {
     if (!canvas) return;
-    const objects = canvas.getObjects();
-    const items: LayerItem[] = objects
-      .map((obj: any, i: number) => ({
+    const objs = canvas.getObjects();
+    setLayers(
+      objs.map((obj: any, i: number) => ({
         id: obj.id || `layer_${i}`,
         name: obj.name || `${obj.type || 'object'}_${i}`,
         type: obj.type || 'object',
         visible: obj.visible !== false,
         object: obj,
-      }))
-      .reverse(); // top layer first
-    setLayers(items);
-
+      })).reverse(),
+    );
     const active = canvas.getActiveObject();
     setSelectedId(active ? (active as any).id || null : null);
   }, [canvas]);
 
   useEffect(() => {
     if (!canvas) return;
-    refreshLayers();
+    refresh();
+    const events = ['object:added', 'object:removed', 'object:modified',
+      'selection:created', 'selection:updated', 'selection:cleared'];
+    events.forEach((ev) => canvas.on(ev as any, refresh));
+    return () => { events.forEach((ev) => canvas.off(ev as any, refresh)); };
+  }, [canvas, refresh]);
 
-    canvas.on('object:added', refreshLayers);
-    canvas.on('object:removed', refreshLayers);
-    canvas.on('object:modified', refreshLayers);
-    canvas.on('selection:created', refreshLayers);
-    canvas.on('selection:updated', refreshLayers);
-    canvas.on('selection:cleared', refreshLayers);
-
-    return () => {
-      canvas.off('object:added', refreshLayers);
-      canvas.off('object:removed', refreshLayers);
-      canvas.off('object:modified', refreshLayers);
-      canvas.off('selection:created', refreshLayers);
-      canvas.off('selection:updated', refreshLayers);
-      canvas.off('selection:cleared', refreshLayers);
-    };
-  }, [canvas, refreshLayers]);
-
-  const selectLayer = (layer: LayerItem) => {
+  const select = (layer: LayerItem) => {
     if (!canvas) return;
     canvas.setActiveObject(layer.object);
     canvas.requestRenderAll();
     setSelectedId(layer.id);
   };
 
-  const toggleVisibility = (layer: LayerItem) => {
+  const toggleVisible = (layer: LayerItem) => {
     if (!canvas) return;
     layer.object.set('visible', !layer.visible);
     canvas.requestRenderAll();
-    refreshLayers();
+    refresh();
     pushHistory(stringifyCanvas(canvas));
   };
 
-  const deleteLayer = (layer: LayerItem) => {
+  const del = (layer: LayerItem) => {
     if (!canvas) return;
     canvas.remove(layer.object);
     canvas.discardActiveObject();
@@ -104,75 +80,93 @@ export default function LayersPanel() {
     pushHistory(stringifyCanvas(canvas));
   };
 
-  const moveLayer = (layer: LayerItem, direction: 'up' | 'down') => {
+  const move = (layer: LayerItem, dir: 'up' | 'down') => {
     if (!canvas) return;
-    if (direction === 'up') {
-      canvas.bringObjectForward(layer.object);
-    } else {
-      canvas.sendObjectBackwards(layer.object);
-    }
+    if (dir === 'up') canvas.bringObjectForward(layer.object);
+    else canvas.sendObjectBackwards(layer.object);
     canvas.requestRenderAll();
-    refreshLayers();
+    refresh();
     pushHistory(stringifyCanvas(canvas));
   };
 
   return (
-    <div className="p-4">
-      <h3 className="text-sm font-semibold text-gray-700 mb-3">Layers</h3>
-      {layers.length === 0 ? (
-        <p className="text-xs text-gray-400">No elements yet. Use tools to add shapes or text.</p>
-      ) : (
-        <div className="space-y-0.5">
-          {layers.map((layer) => {
-            const Icon = typeIcons[layer.type] || Square;
-            const isSelected = layer.id === selectedId;
-            return (
-              <div
-                key={layer.id}
-                className={`flex items-center gap-2 px-2 py-1.5 rounded cursor-pointer group ${
-                  isSelected ? 'bg-indigo-50 ring-1 ring-indigo-200' : 'hover:bg-gray-50'
-                }`}
-                onClick={() => selectLayer(layer)}
-              >
-                <Icon size={14} className={`shrink-0 ${isSelected ? 'text-indigo-500' : 'text-gray-400'}`} />
-                <span className={`text-xs truncate flex-1 ${!layer.visible ? 'opacity-40' : ''}`}>
-                  {layer.name}
-                </span>
-                <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition">
-                  <button
-                    onClick={(e) => { e.stopPropagation(); moveLayer(layer, 'up'); }}
-                    className="p-0.5 rounded hover:bg-gray-200 text-gray-400"
-                    title="Bring forward"
-                  >
-                    <ChevronUp size={12} />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); moveLayer(layer, 'down'); }}
-                    className="p-0.5 rounded hover:bg-gray-200 text-gray-400"
-                    title="Send backward"
-                  >
-                    <ChevronDown size={12} />
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); toggleVisibility(layer); }}
-                    className="p-0.5 rounded hover:bg-gray-200 text-gray-400"
-                    title="Toggle visibility"
-                  >
-                    {layer.visible ? <Eye size={12} /> : <EyeOff size={12} />}
-                  </button>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); deleteLayer(layer); }}
-                    className="p-0.5 rounded hover:bg-red-100 text-gray-400 hover:text-red-500"
-                    title="Delete"
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
+    <div className="h-full flex flex-col">
+      <div className="px-4 pt-4 pb-3 border-b border-gray-100">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-indigo-400" />
+            <span className="text-xs font-semibold text-gray-600 uppercase tracking-wider">Layers</span>
+          </div>
+          <span className="text-xs text-gray-400">{layers.length}</span>
         </div>
-      )}
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-3">
+        {layers.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <Box size={28} className="text-gray-200 mb-3" />
+            <p className="text-xs text-gray-400">No layers yet.<br />Add shapes, text or images.</p>
+          </div>
+        ) : (
+          <div className="space-y-0.5">
+            {layers.map((layer) => {
+              const Icon = TYPE_ICONS[layer.type] || Square;
+              const iconColor = TYPE_COLORS[layer.type] || 'text-gray-400';
+              const active = layer.id === selectedId;
+              return (
+                <div
+                  key={layer.id}
+                  onClick={() => select(layer)}
+                  className={`group flex items-center gap-2 px-2 py-2 rounded-lg cursor-pointer transition-colors ${
+                    active ? 'bg-indigo-50 ring-1 ring-indigo-200' : 'hover:bg-gray-50'
+                  }`}
+                >
+                  <Icon
+                    size={14}
+                    className={`shrink-0 ${active ? 'text-indigo-500' : iconColor} ${!layer.visible ? 'opacity-30' : ''}`}
+                  />
+                  <span className={`text-xs truncate flex-1 min-w-0 ${
+                    active ? 'text-indigo-700 font-medium' : 'text-gray-700'
+                  } ${!layer.visible ? 'opacity-40 line-through' : ''}`}>
+                    {layer.name}
+                  </span>
+
+                  {/* Actions — show on hover */}
+                  <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <ActionBtn title="Bring forward" onClick={(e) => { e.stopPropagation(); move(layer, 'up'); }}>
+                      <ChevronUp size={11} />
+                    </ActionBtn>
+                    <ActionBtn title="Send backward" onClick={(e) => { e.stopPropagation(); move(layer, 'down'); }}>
+                      <ChevronDown size={11} />
+                    </ActionBtn>
+                    <ActionBtn title={layer.visible ? 'Hide' : 'Show'} onClick={(e) => { e.stopPropagation(); toggleVisible(layer); }}>
+                      {layer.visible ? <Eye size={11} /> : <EyeOff size={11} />}
+                    </ActionBtn>
+                    <ActionBtn title="Delete" onClick={(e) => { e.stopPropagation(); del(layer); }} danger>
+                      <Trash2 size={11} />
+                    </ActionBtn>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
+  );
+}
+
+function ActionBtn({ title, onClick, danger, children }: {
+  title: string; onClick: (e: React.MouseEvent) => void; danger?: boolean; children: React.ReactNode;
+}) {
+  return (
+    <button title={title} onClick={onClick}
+      className={`p-1 rounded-md transition ${
+        danger
+          ? 'text-gray-400 hover:bg-red-100 hover:text-red-500'
+          : 'text-gray-400 hover:bg-gray-200 hover:text-gray-600'
+      }`}>
+      {children}
+    </button>
   );
 }

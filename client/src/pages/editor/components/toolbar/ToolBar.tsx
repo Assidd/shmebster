@@ -14,15 +14,22 @@ import { getCanvasInstance } from '../../canvasInstance';
 import { stringifyCanvas } from '../../canvasSerialization';
 import { FabricImage } from 'fabric';
 
-const tools: { id: ToolType; icon: typeof MousePointer2; label: string; shortcut: string }[] = [
-  { id: 'select', icon: MousePointer2, label: 'Select', shortcut: 'V' },
-  { id: 'text', icon: Type, label: 'Text', shortcut: 'T' },
-  { id: 'rectangle', icon: Square, label: 'Rectangle', shortcut: 'R' },
-  { id: 'circle', icon: Circle, label: 'Circle', shortcut: 'C' },
-  { id: 'triangle', icon: Triangle, label: 'Triangle', shortcut: '' },
-  { id: 'line', icon: Minus, label: 'Line', shortcut: 'L' },
-  { id: 'pencil', icon: Pencil, label: 'Draw', shortcut: 'P' },
-  { id: 'image', icon: ImagePlus, label: 'Image', shortcut: '' },
+interface ToolDef {
+  id: ToolType;
+  icon: React.ElementType;
+  label: string;
+  shortcut: string;
+}
+
+const TOOLS: ToolDef[] = [
+  { id: 'select',    icon: MousePointer2, label: 'Select',    shortcut: 'V' },
+  { id: 'text',      icon: Type,          label: 'Text',       shortcut: 'T' },
+  { id: 'rectangle', icon: Square,        label: 'Rectangle',  shortcut: 'R' },
+  { id: 'circle',    icon: Circle,        label: 'Circle',     shortcut: 'C' },
+  { id: 'triangle',  icon: Triangle,      label: 'Triangle',   shortcut: '' },
+  { id: 'line',      icon: Minus,         label: 'Line',       shortcut: 'L' },
+  { id: 'pencil',    icon: Pencil,        label: 'Draw',       shortcut: 'P' },
+  { id: 'image',     icon: ImagePlus,     label: 'Image',      shortcut: '' },
 ];
 
 export default function ToolBar() {
@@ -40,7 +47,6 @@ export default function ToolBar() {
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     const canvas = getCanvasInstance();
     if (!canvas) return;
 
@@ -51,15 +57,12 @@ export default function ToolBar() {
         (img as any).id = `img_${Date.now()}`;
         (img as any).name = `image_${file.name}`;
 
-        // Scale down if too large
         const maxW = canvas.width! * 0.6;
         const maxH = canvas.height! * 0.6;
         if (img.width! > maxW || img.height! > maxH) {
-          const scale = Math.min(maxW / img.width!, maxH / img.height!);
-          img.scale(scale);
+          img.scale(Math.min(maxW / img.width!, maxH / img.height!));
         }
         img.set({ left: 50, top: 50 });
-
         canvas.add(img);
         canvas.setActiveObject(img);
         canvas.requestRenderAll();
@@ -68,26 +71,39 @@ export default function ToolBar() {
       });
     };
     reader.readAsDataURL(file);
-
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   return (
-    <div className="w-14 bg-white border-r border-gray-200 flex flex-col items-center py-3 gap-1">
-      {tools.map(({ id, icon: Icon, label, shortcut }) => (
-        <button
-          key={id}
-          onClick={() => handleToolClick(id)}
-          title={`${label}${shortcut ? ` (${shortcut})` : ''}`}
-          className={`w-10 h-10 rounded-lg flex items-center justify-center transition ${
-            activeTool === id
-              ? 'bg-indigo-100 text-indigo-600'
-              : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700'
-          }`}
-        >
-          <Icon size={18} />
-        </button>
-      ))}
+    <div className="w-14 bg-white border-r border-gray-100 flex flex-col items-center py-3 gap-0.5 shadow-sm">
+      {/* Group separator after select */}
+      {TOOLS.map((tool, i) => {
+        const Icon = tool.icon;
+        const active = activeTool === tool.id;
+        const needsDivider = i === 1 || i === 6; // after select, before pencil
+
+        return (
+          <div key={tool.id} className="flex flex-col items-center w-full">
+            {needsDivider && <div className="w-8 h-px bg-gray-100 my-1.5" />}
+            <button
+              onClick={() => handleToolClick(tool.id)}
+              title={`${tool.label}${tool.shortcut ? ` (${tool.shortcut})` : ''}`}
+              className={`relative w-10 h-10 rounded-xl flex flex-col items-center justify-center gap-0.5 transition-all ${
+                active
+                  ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200'
+                  : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'
+              }`}
+            >
+              <Icon size={17} strokeWidth={active ? 2.2 : 1.8} />
+              {tool.shortcut && (
+                <span className={`text-[8px] font-bold leading-none ${active ? 'text-indigo-200' : 'text-gray-300'}`}>
+                  {tool.shortcut}
+                </span>
+              )}
+            </button>
+          </div>
+        );
+      })}
       <input
         ref={fileInputRef}
         type="file"
